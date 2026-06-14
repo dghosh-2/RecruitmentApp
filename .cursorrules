@@ -1,0 +1,62 @@
+# RecruiterPro Updated — Cursor Rules
+
+You are working on RecruiterPro Updated, a job-listing tracker. Read AGENTS.md first for
+architecture and data flow. These rules are non-negotiable conventions.
+
+## Architecture invariants
+
+1. **AI-first scraping, never HTML heuristics.** The previous version of this app failed because
+   it parsed career pages with CSS selectors and keyword regexes. Do NOT reintroduce Cheerio-style
+   heuristic parsing. The only two extraction paths are:
+   - ATS adapters (`backend/src/scraping/ats/`) hitting public JSON APIs — preferred.
+   - OpenAI structured-output extraction over Playwright-rendered text (`aiExtractor.ts`).
+2. **Adapters implement the `AtsAdapter` interface** in `backend/src/scraping/types.ts`. To support
+   a new ATS: add one file in `scraping/ats/`, register it in `scraping/ats/index.ts`. Nothing else.
+3. **Listings are soft-deleted.** `listings.status = 'deleted'` keeps the row so the fingerprint
+   blocks resurrection on re-scrape. Never hard-delete listing rows except via company cascade.
+4. **Fingerprint = sha1(lower(title) | lower(url or location))**, unique per company. Computed in
+   `listingService.fingerprintListing`. Changing the formula orphans all existing dedupe state —
+   don't, unless writing a migration.
+5. **Background work goes through `JobQueue`** (`backend/src/jobs/queue.ts`). Never fire raw
+   floating promises for scrape work. The queue is the seam for future BullMQ/cron migration.
+6. **Email goes through the provider interface** in `backend/src/email/index.ts`. New providers
+   implement `EmailProvider` and branch on `env.emailProvider`.
+
+## Backend conventions
+
+- TypeScript ESM, Express 4, better-sqlite3 (synchronous — no async DB calls).
+- Routes are thin: validate (zod via `validateBody`) -> call service -> respond JSON.
+  Business logic and SQL live in `services/`. Scrape logic lives in `scraping/`.
+- Async route handlers MUST be wrapped in `asyncHandler` (Express 4 doesn't catch rejections).
+- Errors: throw `HttpError` (utils/httpError.ts); the error middleware formats
+  `{ error: { code, message } }`. Never send ad-hoc error shapes.
+- All config comes from `config/env.ts`. Never read `process.env` elsewhere.
+- Every scrape attempt writes a `scrape_runs` row (create at start, finish on success/failure).
+- Ownership checks: every query filters by `user_id`. New endpoints must do the same.
+- Migrations: sequential numbered SQL files in `backend/src/db/migrations/`, applied on boot.
+  Never edit an applied migration; add a new one.
+
+## Frontend conventions
+
+- React 18 + Vite + TypeScript, react-router v7. No state library — context + local state.
+- All HTTP goes through `src/api/client.ts` (`api<T>()`) and typed wrappers in `src/api/endpoints.ts`.
+- Types shared with the API live in `src/api/types.ts` and must mirror backend JSON shapes (camelCase).
+- Styling: plain CSS in `src/styles/global.css` using the existing custom properties.
+  Palette is white + blue (`--blue-*`, `--ink-*`). Fonts: Space Grotesk (UI), JetBrains Mono (accents).
+  No CSS frameworks, no inline style sprawl for things the stylesheet already covers.
+- Long-running backend work (discovery, background scrapes) is reflected by polling GET endpoints;
+  keep poll intervals >= 2.5s.
+
+## Things that look like bugs but aren't
+
+- `.env` lives at the repo root and is loaded by `backend/src/config/env.ts` with fallbacks.
+- The app boots without OPENAI_API_KEY: ATS-hosted boards still scrape; discovery and AI
+  extraction return clear errors.
+- Lever/SmartRecruiters adapters paginate via skip/offset; Greenhouse/Ashby/Workable return
+  everything in one call — that's per their APIs, not an oversight.
+
+## When adding features
+
+- Email notifications: implement a Resend provider in `backend/src/email/`, flip EMAIL_PROVIDER.
+- Scheduled scraping: add a scheduler that calls `enqueueScrape` — do not duplicate pipeline logic.
+- Run `npm run typecheck` at the root before considering work done.
