@@ -1,12 +1,14 @@
 import { api } from './client';
 import type {
   Company,
+  CompanySearch,
   Industry,
   Listing,
   Preference,
   ScrapeMode,
   ScrapeResult,
   ScrapeRun,
+  SearchMode,
   User,
 } from './types';
 
@@ -59,6 +61,16 @@ export const companyApi = {
     api<{ company: Company }>(`/companies/${id}/rediscover`, { method: 'POST' }),
   scrapeAll: (mode: ScrapeMode = 'all') =>
     api<{ queued: number }>('/companies/scrape-all', { method: 'POST', body: { mode } }),
+};
+
+// --- company discovery (NL multi-agent search) ---
+export const searchApi = {
+  // Fire-and-forget: backend queues the multi-agent run; poll get(id) for status.
+  // mode 'fast' uses a small fan-out with no orchestrator LLM calls.
+  create: (query: string, mode: SearchMode = 'thorough') =>
+    api<{ search: CompanySearch }>('/search', { method: 'POST', body: { query, mode } }),
+  get: (id: number) => api<{ search: CompanySearch }>(`/search/${id}`),
+  list: () => api<{ searches: CompanySearch[] }>('/search'),
 };
 
 // --- listings ---

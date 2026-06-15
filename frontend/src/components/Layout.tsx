@@ -34,6 +34,12 @@ export function Layout() {
           <NavLink to="/" end className={({ isActive }) => `navlink${isActive ? ' active' : ''}`}>
             Dashboard
           </NavLink>
+          <NavLink
+            to="/discover"
+            className={({ isActive }) => `navlink${isActive ? ' active' : ''}`}
+          >
+            Discover
+          </NavLink>
           <NavLink to="/inbox" className={({ isActive }) => `navlink${isActive ? ' active' : ''}`}>
             New Jobs
             {newCount > 0 && <span className="nav-badge">{newCount}</span>}

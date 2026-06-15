@@ -22,6 +22,12 @@ This is a working from-scratch rebuild in `recruiterproupdated/`, not just a sca
 - Major recent fixes that must be preserved: verified ATS probing, async scrape endpoints,
   truncation warnings, SVG-safe link extraction, interrupted-scrape recovery, and the New Jobs
   internships/full-time filter.
+- **Internship-only scrape mode** (added): every scrape entry point takes a
+  `mode` of `all` (default) or `internship`. See "Internship-only scrape mode" below.
+- Git: this folder is its own repo, pushed to `https://github.com/dghosh-2/RecruitmentApp`
+  (the older Cheerio/HTML-parsing version lives separately at
+  `https://github.com/dghosh-2/RecruiterPro`). `.env`, `backend/data/`, and `node_modules/` are
+  gitignored — never commit the OpenAI key.
 
 ## What this app does
 
@@ -33,6 +39,9 @@ RecruiterPro helps students and professionals track job openings at companies th
   automatically. If discovery fails, the UI asks for a manually pasted URL.
 - A **Scrape** button (per company, or "Scrape all") pulls current openings. Net-new listings
   land in the **New Jobs** inbox.
+- An **Interns** / **Scrape interns** button (per company, and "Scrape interns" on the dashboard)
+  scrapes the same sources but keeps only internship/early-career roles. Companies can also store
+  a dedicated internships page (`intern_careers_url`) used by intern scrapes.
 - Users **delete** listings after applying (or to dismiss them). Deleted listings never
   reappear, even after re-scraping.
 
@@ -78,9 +87,35 @@ Extraction then takes one of two paths:
 
 Both paths converge in `pipeline.ts`: normalize -> fingerprint -> upsert -> audit -> notify.
 
+### Internship-only scrape mode
+
+`scrapeCompany(companyId, mode)` and the `enqueueScrape`/`enqueueDiscoveryAndScrape` helpers take a
+`ScrapeMode` of `'all'` (default) or `'internship'`. The route layer reads it from the request body
+(`{ mode }`, validated by zod, defaults to `all`) on `POST /companies/:id/scrape` and
+`POST /companies/scrape-all`.
+
+- **Source selection** (`resolveSource` in `pipeline.ts`): in `internship` mode, if the company has
+  an `intern_careers_url`, that page is scraped via the AI path; otherwise it falls back to the ATS
+  API (when known) or the general `careers_url`. An `all` scrape ignores `intern_careers_url`.
+- **Filtering happens after normalization**, never by changing extraction. Both the ATS and AI
+  paths extract everything, then intern mode keeps only `employmentType === 'internship'`. This
+  keeps the AI pagination/loop-detection logic untouched and applies one consistent definition.
+- **Internship classification is centralized** in `backend/src/scraping/internship.ts`
+  (`looksLikeInternship`). It is deliberately high-precision and matches intern/internship, co-op,
+  "summer/winter/spring analyst|associate", insight/spring weeks, industrial placements, year in
+  industry, apprenticeships, and vacation schemes — while NOT firing on "Internal", "International",
+  "Cooperative", etc. It is the single source of truth used by `normalize.ts` AND the ATS
+  classifiers (`ats/http.ts` `classifyTitle`, Lever). `normalize.ts` lets a title that reads as an
+  internship override a generic upstream label, so ATS feeds that tag a "Summer Analyst" as
+  full_time/unknown are still corrected to internship.
+- **Single-flight is keyed per company AND mode** (`${companyId}:${mode}`), so an `all` and an
+  `internship` scrape of the same company can run concurrently, but duplicate requests for the same
+  pair still coalesce.
+
 ### Pipeline guarantees
 
-- **Single-flight per company**: concurrent scrape requests for the same company await one run.
+- **Single-flight per company + mode**: concurrent scrape requests for the same company and
+  `mode` (`all`/`internship`) await one run (keyed `${companyId}:${mode}`).
 - **Dedupe**: `fingerprint = sha1(lower(title) | lower(url or location))`, UNIQUE per company.
 - **Soft delete**: `status='deleted'` rows persist; upsert only refreshes `last_seen_at`, so
   deleted jobs never resurface. New rows get `status='new'`.
@@ -116,7 +151,10 @@ Do not weaken these checks. They were added after real failures:
   at 10 jobs/page; with `SCRAPE_MAX_PAGES=30`, the AI extractor verified 215 listings.
 - **Belvedere Trading**: discovery finds `https://www.belvederetrading.com/open-positions-1`.
   Its page includes SVG links; `browser.ts` must use `getAttribute('href')` and `new URL(...)`
-  rather than `(a as HTMLAnchorElement).href`, because SVG `href` is not a string.
+  rather than `(a as HTMLAnchorElement).href`, because SVG `href` is not a string (an
+  `SVGAnimatedString`, whose `.startsWith` is undefined). Link extraction now wraps EACH anchor in
+  its own try/catch and coerces/validates `href`, so a single malformed/SVG/`javascript:` anchor
+  can never throw and abort the whole page's extraction. Verified: 15 listings, no error.
 - **Apple-scale boards**: can contain thousands of jobs. Scrapes are intentionally asynchronous.
   For mega-companies, prefer manually setting a filtered careers URL (e.g. intern search results)
   so the app does not spend minutes crawling irrelevant pages.
@@ -130,20 +168,23 @@ recruiterproupdated/
   backend/src/
     config/env.ts       all env access; hot-reloads .env changes; page-cap defaults
     db/                 better-sqlite3 + sequential SQL migrations (auto-applied on boot)
+                        001_init.sql, 002_intern_careers_url.sql
     middleware/         JWT auth, zod validation, error formatter
     routes/             auth, industries, companies, listings (thin HTTP layer)
     services/           business logic + SQL (auth, industry, company, listing, scrapeRun)
     scraping/
       types.ts          AtsAdapter interface, RawListing/NormalizedListing
+      internship.ts     looksLikeInternship() — single source of truth for intern classification
       ats/              greenhouse, lever, ashby, smartrecruiters, workable + registry
       discovery.ts      name -> ATS probe -> OpenAI web search -> DiscoveryResult
       browser.ts        shared headless Chromium (Playwright), renderPage(), robust link extraction
       aiExtractor.ts    OpenAI structured-output extraction + pagination loop + truncation flag
       normalize.ts      title cleanup, URL resolution, employment-type classification
-      pipeline.ts       orchestrator: scrapeCompany, discoverForCompany, queue helpers
+      pipeline.ts       orchestrator: scrapeCompany(mode), resolveSource, discoverForCompany, queue
     jobs/queue.ts       in-process bounded-concurrency queue (seam for BullMQ/cron)
     email/index.ts      EmailProvider interface; console provider default (seam for Resend)
     app.ts / server.ts  express wiring; migrations run on boot
+  backend/scripts/      manual smoke tests: testDiscovery, testExtraction, testInternClassifier
   frontend/src/
     api/                fetch client (JWT header), typed endpoint wrappers, shared types
     context/            AuthContext (token in localStorage, /auth/me hydration)
@@ -158,7 +199,7 @@ recruiterproupdated/
 |-------|-------|
 | `users` | email, bcrypt hash, `preference` (internship/full_time/both), `notify_email` |
 | `industries` | per-user, unique name per user |
-| `companies` | `careers_url`, `ats_type`/`ats_slug`, `discovery_status` (pending/searching/found/manual_needed), last scrape status/error |
+| `companies` | `careers_url`, `intern_careers_url` (optional dedicated internships page), `ats_type`/`ats_slug`, `discovery_status` (pending/searching/found/manual_needed), last scrape status/error |
 | `listings` | title/url/location/`employment_type`/team, `fingerprint` (UNIQUE with company), `status` (new/seen/deleted) |
 | `scrape_runs` | per-attempt audit: method (`ats:greenhouse` / `ai`), pages, found/new counts, error |
 
@@ -173,10 +214,10 @@ GET    /api/health
 POST   /api/auth/register | /api/auth/login
 GET    /api/auth/me            PATCH /api/auth/me        (preference, notifyEmail)
 GET/POST /api/industries       PATCH/DELETE /api/industries/:id
-GET/POST /api/companies        GET/PATCH/DELETE /api/companies/:id
+GET/POST /api/companies        GET/PATCH/DELETE /api/companies/:id   (PATCH: name, industryId, careersUrl, internCareersUrl)
 POST   /api/companies/:id/rediscover  (clear careers source, discover + scrape in background)
-POST   /api/companies/:id/scrape      (async; queues scrape and returns 202 immediately)
-POST   /api/companies/scrape-all      (enqueues all; UI polls)
+POST   /api/companies/:id/scrape      (body { mode?: 'all'|'internship' }; async, returns 202)
+POST   /api/companies/scrape-all      (body { mode?: 'all'|'internship' }; enqueues all; UI polls)
 GET    /api/listings?companyId=&status=&applyPreference=&employmentType=
 PATCH  /api/listings/:id       (status)   DELETE /api/listings/:id  (soft delete)
 POST   /api/listings/mark-seen
@@ -220,11 +261,20 @@ npm run migrate                   # usually unnecessary — migrations run on bo
 npm run typecheck                 # both workspaces
 cd backend && npx tsx scripts/testDiscovery.ts "Company Name"
 cd backend && npx tsx scripts/testExtraction.ts "https://careers.example.com/jobs"
+cd backend && npx tsx scripts/testInternClassifier.ts   # offline: intern classifier + filter
 ```
+
+If `npx`/`tsx` can't spawn its IPC pipe in a restricted shell, run scripts via
+`node --import tsx scripts/<file>.ts` instead.
 
 ## Gotchas
 
-1. Playwright Chromium must be installed once or AI-path scrapes fail with a clear launch error.
+1. Playwright Chromium must be installed once or AI-path scrapes fail with a clear launch error
+   (`npx playwright install chromium`). In sandboxed environments Playwright may resolve to an
+   ephemeral per-session cache path (`.../cursor-sandbox-cache/<hash>/playwright/...`); when that
+   hash changes after an environment reset, the browser "disappears" and must be reinstalled. To
+   make it stable, set `PLAYWRIGHT_BROWSERS_PATH` to a persistent dir (e.g.
+   `~/Library/Caches/ms-playwright`).
 2. better-sqlite3 is synchronous by design — don't `await` DB calls, and keep transactions in
    `db.transaction()` wrappers.
 3. The SQLite file lives at `backend/data/recruiterpro.db` (gitignored). Delete it to reset.
@@ -236,3 +286,10 @@ cd backend && npx tsx scripts/testExtraction.ts "https://careers.example.com/job
 7. The New Jobs page has an All / Internships / Full-time filter. Internships are exact
    `employment_type='internship'`; full-time includes `unknown` because custom sites often omit
    employment type and hiding unknowns would miss real jobs.
+8. Internship classification lives ONLY in `scraping/internship.ts` (`looksLikeInternship`). Don't
+   re-implement intern keyword regexes elsewhere — extend that matcher and its test
+   (`scripts/testInternClassifier.ts`) instead, and keep it high-precision (false positives leak
+   permanent roles into the intern-only scrape).
+9. Intern scrapes filter AFTER extraction; they never alter the AI pagination loop. If interns are
+   spread across many pages, the same `SCRAPE_MAX_PAGES` cap and truncation warning apply, so a
+   dedicated `intern_careers_url` (a filtered intern search page) is the best lever for big boards.

@@ -69,3 +69,37 @@ export interface ScrapeResult {
   listingsNew: number;
   error?: string;
 }
+
+// --- company discovery (NL multi-agent search) ---
+export type SearchStatus = 'pending' | 'running' | 'success' | 'failed';
+export type SearchMode = 'fast' | 'thorough';
+
+export interface ResearchTask {
+  angle: 'direct_match' | 'adjacent' | 'constraint' | 'dynamic';
+  focus: string;
+  instructions: string;
+}
+
+export interface SearchPlan {
+  intentSummary: string;
+  constraints: string[];
+  tasks: ResearchTask[];
+}
+
+export interface SearchResultCompany {
+  name: string;
+  website: string | null;
+  reason: string;
+}
+
+export interface CompanySearch {
+  id: number;
+  query: string;
+  mode: SearchMode;
+  status: SearchStatus;
+  error: string | null;
+  plan: SearchPlan | null;
+  results: SearchResultCompany[];
+  createdAt: string;
+  finishedAt: string | null;
+}

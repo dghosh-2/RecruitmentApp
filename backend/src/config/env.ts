@@ -51,6 +51,14 @@ function computeEnv() {
     scrapeTimeoutMs: int('SCRAPE_TIMEOUT_MS', 30000),
     scrapeConcurrency: int('SCRAPE_CONCURRENCY', 2),
 
+    // NL company-discovery (multi-agent search). searchModel defaults to the
+    // shared OPENAI_MODEL; the agent fan-out and queue have their own limits.
+    searchModel: str('SEARCH_MODEL', str('OPENAI_MODEL', 'gpt-4o')),
+    searchConcurrency: int('SEARCH_CONCURRENCY', 2),
+    searchAgentConcurrency: int('SEARCH_AGENT_CONCURRENCY', 3),
+    searchMaxExtraAgents: int('SEARCH_MAX_EXTRA_AGENTS', 4),
+    searchMaxResults: int('SEARCH_MAX_RESULTS', 15),
+
     emailProvider: str('EMAIL_PROVIDER', 'console'),
     resendApiKey: process.env.RESEND_API_KEY ?? '',
     emailFrom: str('EMAIL_FROM', 'RecruiterPro <noreply@example.com>'),

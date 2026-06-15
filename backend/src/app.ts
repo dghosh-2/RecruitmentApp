@@ -4,6 +4,7 @@ import authRoutes from './routes/auth.js';
 import companyRoutes from './routes/companies.js';
 import industryRoutes from './routes/industries.js';
 import listingRoutes from './routes/listings.js';
+import searchRoutes from './routes/search.js';
 import { errorHandler, notFoundHandler } from './middleware/error.js';
 import { hasOpenAI } from './config/env.js';
 
@@ -21,6 +22,7 @@ export function createApp() {
   app.use('/api/industries', industryRoutes);
   app.use('/api/companies', companyRoutes);
   app.use('/api/listings', listingRoutes);
+  app.use('/api/search', searchRoutes);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

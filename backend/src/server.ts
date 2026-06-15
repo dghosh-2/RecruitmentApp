@@ -3,10 +3,12 @@ import { env, hasOpenAI } from './config/env.js';
 import { runMigrations } from './db/migrate.js';
 import { closeBrowser } from './scraping/browser.js';
 import { recoverInterruptedScrapes } from './services/scrapeRunService.js';
+import { recoverInterruptedSearches } from './services/searchService.js';
 import { logger } from './utils/logger.js';
 
 runMigrations();
 recoverInterruptedScrapes();
+recoverInterruptedSearches();
 
 const app = createApp();
 

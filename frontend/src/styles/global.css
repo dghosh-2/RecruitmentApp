@@ -471,3 +471,146 @@ input:focus, select:focus {
   font-size: 13px;
   padding: 7px 10px;
 }
+
+/* ---------- discover ---------- */
+.discover-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 18px;
+}
+.discover-modes {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.discover-mode-hint {
+  font-size: 12.5px;
+  color: var(--ink-400);
+}
+.discover-input {
+  font-family: var(--font-ui);
+  font-size: 15px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--ink-900);
+  outline: none;
+  resize: vertical;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.discover-input:focus {
+  border-color: var(--blue-400);
+  box-shadow: 0 0 0 3px var(--blue-100);
+}
+.discover-form-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.discover-examples {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  flex: 1;
+}
+.discover-chip {
+  font-family: var(--font-ui);
+  font-size: 12px;
+  color: var(--ink-600);
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  border-radius: 99px;
+  padding: 5px 11px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+.discover-chip:hover {
+  border-color: var(--blue-400);
+  color: var(--blue-500);
+}
+
+.discover-results {
+  margin-top: 24px;
+}
+.discover-status {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px;
+}
+.discover-results-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+.discover-results-head h2 {
+  font-size: 18px;
+  font-weight: 600;
+}
+.discover-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 14px;
+}
+.discover-card {
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.discover-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+.discover-card-head h3 {
+  font-size: 16px;
+  font-weight: 600;
+}
+.discover-reason {
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--ink-600);
+  line-height: 1.5;
+}
+.discover-link {
+  font-size: 12px;
+  color: var(--ink-400);
+}
+.discover-added {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--green-600);
+  white-space: nowrap;
+}
+.discover-add-form {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.discover-add-form select,
+.discover-add-form input {
+  font-size: 13px;
+  padding: 6px 9px;
+  max-width: 150px;
+}
+.discover-add-error {
+  flex-basis: 100%;
+  text-align: right;
+  font-size: 12px;
+  color: var(--red-600);
+}

@@ -5,6 +5,7 @@ import { Login } from './pages/Login';
 import { Register } from './pages/Register';
 import { Dashboard } from './pages/Dashboard';
 import { CompanyDetail } from './pages/CompanyDetail';
+import { Discover } from './pages/Discover';
 import { Inbox } from './pages/Inbox';
 import { Settings } from './pages/Settings';
 
@@ -36,6 +37,7 @@ export function App() {
             }
           >
             <Route path="/" element={<Dashboard />} />
+            <Route path="/discover" element={<Discover />} />
             <Route path="/companies/:id" element={<CompanyDetail />} />
             <Route path="/inbox" element={<Inbox />} />
             <Route path="/settings" element={<Settings />} />
