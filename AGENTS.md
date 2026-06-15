@@ -84,6 +84,12 @@ Extraction then takes one of two paths:
    a `next_page_url`. The loop follows pagination up to `SCRAPE_MAX_PAGES`, stops on repeat URLs
    or pages yielding nothing new. It returns `truncated=true` if it hits the page cap while another
    page still exists; the pipeline stores that as a visible warning.
+   - **Performance**: the whole pagination loop runs in one Playwright *render session*
+     (`createRenderSession()` in `browser.ts`) so the browser context — with request blocking
+     installed once — is reused across pages instead of rebuilt per page. Each render blocks
+     image/media/font requests and known analytics/tracker hosts (text + anchors are untouched), and
+     waits for the anchor count to *settle* rather than `networkidle` (faster, and immune to pages
+     that hold sockets open). None of this changes what gets extracted.
 
 Both paths converge in `pipeline.ts`: normalize -> fingerprint -> upsert -> audit -> notify.
 
@@ -177,7 +183,8 @@ recruiterproupdated/
       internship.ts     looksLikeInternship() — single source of truth for intern classification
       ats/              greenhouse, lever, ashby, smartrecruiters, workable + registry
       discovery.ts      name -> ATS probe -> OpenAI web search -> DiscoveryResult
-      browser.ts        shared headless Chromium (Playwright), renderPage(), robust link extraction
+      browser.ts        shared headless Chromium (Playwright); render sessions reuse one context
+                        per scrape, block images/media/fonts/trackers, robust link extraction
       aiExtractor.ts    OpenAI structured-output extraction + pagination loop + truncation flag
       normalize.ts      title cleanup, URL resolution, employment-type classification
       pipeline.ts       orchestrator: scrapeCompany(mode), resolveSource, discoverForCompany, queue

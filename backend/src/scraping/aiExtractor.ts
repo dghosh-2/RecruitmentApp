@@ -1,6 +1,6 @@
 import { env } from '../config/env.js';
 import { logger } from '../utils/logger.js';
-import { renderPage } from './browser.js';
+import { createRenderSession } from './browser.js';
 import { getOpenAI } from './openaiClient.js';
 import type { EmploymentType, RawListing } from './types.js';
 
@@ -118,47 +118,54 @@ export async function extractListingsWithAI(startUrl: string): Promise<AiExtract
   let currentUrl: string | null = startUrl;
   let pagesCrawled = 0;
 
-  while (currentUrl && pagesCrawled < env.scrapeMaxPages) {
-    if (visited.has(currentUrl)) break;
-    visited.add(currentUrl);
+  // One browser context for the whole pagination loop: resource blocking is
+  // installed once and per-page context setup is avoided on large boards.
+  const session = await createRenderSession();
+  try {
+    while (currentUrl && pagesCrawled < env.scrapeMaxPages) {
+      if (visited.has(currentUrl)) break;
+      visited.add(currentUrl);
 
-    logger.info('AI extraction: rendering page', { url: currentUrl, page: pagesCrawled + 1 });
-    const rendered = await renderPage(currentUrl);
-    visited.add(rendered.finalUrl);
-    pagesCrawled += 1;
+      logger.info('AI extraction: rendering page', { url: currentUrl, page: pagesCrawled + 1 });
+      const rendered = await session.render(currentUrl);
+      visited.add(rendered.finalUrl);
+      pagesCrawled += 1;
 
-    const extraction = await extractFromPage(rendered.text, rendered.links, rendered.finalUrl);
+      const extraction = await extractFromPage(rendered.text, rendered.links, rendered.finalUrl);
 
-    let newOnThisPage = 0;
-    for (const item of extraction.listings) {
-      const url = toAbsolute(item.url, rendered.finalUrl);
-      const key = `${item.title.toLowerCase()}|${(url ?? item.location ?? '').toLowerCase()}`;
-      if (seenFingerprints.has(key)) continue;
-      seenFingerprints.add(key);
-      newOnThisPage += 1;
-      all.push({
-        title: item.title,
-        url,
-        location: item.location,
-        employmentType: item.employment_type,
-        team: item.team,
+      let newOnThisPage = 0;
+      for (const item of extraction.listings) {
+        const url = toAbsolute(item.url, rendered.finalUrl);
+        const key = `${item.title.toLowerCase()}|${(url ?? item.location ?? '').toLowerCase()}`;
+        if (seenFingerprints.has(key)) continue;
+        seenFingerprints.add(key);
+        newOnThisPage += 1;
+        all.push({
+          title: item.title,
+          url,
+          location: item.location,
+          employmentType: item.employment_type,
+          team: item.team,
+        });
+      }
+
+      logger.info('AI extraction: page parsed', {
+        url: rendered.finalUrl,
+        found: extraction.listings.length,
+        new: newOnThisPage,
+        nextPage: extraction.next_page_url,
       });
+
+      // A next page that yields nothing new means we're looping — stop.
+      if (newOnThisPage === 0 && pagesCrawled > 1) {
+        currentUrl = null;
+        break;
+      }
+
+      currentUrl = toAbsolute(extraction.next_page_url, rendered.finalUrl);
     }
-
-    logger.info('AI extraction: page parsed', {
-      url: rendered.finalUrl,
-      found: extraction.listings.length,
-      new: newOnThisPage,
-      nextPage: extraction.next_page_url,
-    });
-
-    // A next page that yields nothing new means we're looping — stop.
-    if (newOnThisPage === 0 && pagesCrawled > 1) {
-      currentUrl = null;
-      break;
-    }
-
-    currentUrl = toAbsolute(extraction.next_page_url, rendered.finalUrl);
+  } finally {
+    await session.close();
   }
 
   const truncated = currentUrl !== null && !visited.has(currentUrl);

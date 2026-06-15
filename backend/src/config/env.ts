@@ -49,7 +49,10 @@ function computeEnv() {
 
     scrapeMaxPages: int('SCRAPE_MAX_PAGES', 30),
     scrapeTimeoutMs: int('SCRAPE_TIMEOUT_MS', 30000),
-    scrapeConcurrency: int('SCRAPE_CONCURRENCY', 2),
+    // Scrape work is almost entirely I/O-bound (network, OpenAI, Playwright
+    // waits), so several companies can scrape at once without CPU contention.
+    // The practical ceilings are OpenAI rate limits and Chromium memory.
+    scrapeConcurrency: int('SCRAPE_CONCURRENCY', 4),
 
     // NL company-discovery (multi-agent search). searchModel defaults to the
     // shared OPENAI_MODEL; the agent fan-out and queue have their own limits.
