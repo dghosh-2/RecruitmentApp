@@ -73,6 +73,9 @@ export interface ScrapeResult {
 // --- company discovery (NL multi-agent search) ---
 export type SearchStatus = 'pending' | 'running' | 'success' | 'failed';
 export type SearchMode = 'fast' | 'thorough';
+// 'discover' = company suggestions only; 'auto' = the all-in-one Assistant run.
+export type SearchKind = 'discover' | 'auto';
+export type AutoPhase = 'planning' | 'researching' | 'scraping' | 'done';
 
 export interface ResearchTask {
   angle: 'direct_match' | 'adjacent' | 'constraint' | 'dynamic';
@@ -83,6 +86,7 @@ export interface ResearchTask {
 export interface SearchPlan {
   intentSummary: string;
   constraints: string[];
+  exclusions: string[];
   tasks: ResearchTask[];
 }
 
@@ -92,14 +96,33 @@ export interface SearchResultCompany {
   reason: string;
 }
 
+export interface AutoJobListing {
+  title: string;
+  url: string | null;
+  location: string | null;
+}
+
+export interface AutoCompanyResult {
+  companyId: number;
+  companyName: string;
+  careersUrl: string | null;
+  discoveryStatus: 'pending' | 'searching' | 'found' | 'manual_needed';
+  scrapeStatus: 'running' | 'success' | 'failed' | null;
+  error: string | null;
+  listings: AutoJobListing[];
+}
+
 export interface CompanySearch {
   id: number;
   query: string;
   mode: SearchMode;
+  kind: SearchKind;
+  phase: AutoPhase | null;
   status: SearchStatus;
   error: string | null;
   plan: SearchPlan | null;
   results: SearchResultCompany[];
+  jobs: AutoCompanyResult[];
   createdAt: string;
   finishedAt: string | null;
 }

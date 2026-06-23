@@ -35,6 +35,12 @@ export function Layout() {
             Dashboard
           </NavLink>
           <NavLink
+            to="/assistant"
+            className={({ isActive }) => `navlink${isActive ? ' active' : ''}`}
+          >
+            Assistant
+          </NavLink>
+          <NavLink
             to="/discover"
             className={({ isActive }) => `navlink${isActive ? ' active' : ''}`}
           >

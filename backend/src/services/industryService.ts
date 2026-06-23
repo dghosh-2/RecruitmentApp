@@ -26,6 +26,17 @@ export function createIndustry(userId: number, name: string) {
     .get(Number(info.lastInsertRowid));
 }
 
+/** Idempotent: return the user's industry with this name, creating it if absent. */
+export function getOrCreateIndustry(userId: number, name: string): { id: number; name: string } {
+  const existing = db
+    .prepare('SELECT id, name FROM industries WHERE user_id = ? AND name = ?')
+    .get(userId, name) as { id: number; name: string } | undefined;
+  if (existing) return existing;
+
+  const info = db.prepare('INSERT INTO industries (user_id, name) VALUES (?, ?)').run(userId, name);
+  return { id: Number(info.lastInsertRowid), name };
+}
+
 export function renameIndustry(userId: number, industryId: number, name: string) {
   const info = db
     .prepare('UPDATE industries SET name = ? WHERE id = ? AND user_id = ?')

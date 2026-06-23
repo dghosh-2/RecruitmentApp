@@ -81,10 +81,15 @@ export async function aggregateResults(
   agentCompanies: AgentCompany[],
   trackedCompanyNames: string[],
   searchId: number,
-  mode: SearchMode = 'thorough'
+  mode: SearchMode = 'thorough',
+  exclusions: string[] = []
 ): Promise<SearchResultCompany[]> {
-  const trackedKeys = new Set(trackedCompanyNames.map(nameKey).filter(Boolean));
-  const candidates = dedupe(agentCompanies, trackedKeys);
+  // Both already-tracked companies and user-requested exclusions are dropped
+  // by normalized name so "excluding Point72" works regardless of casing/suffix.
+  const excludedKeys = new Set(
+    [...trackedCompanyNames, ...exclusions].map(nameKey).filter(Boolean)
+  );
+  const candidates = dedupe(agentCompanies, excludedKeys);
   const maxResults = Math.max(1, env.searchMaxResults);
 
   logger.info('Aggregator: candidates deduped', {
@@ -92,7 +97,8 @@ export async function aggregateResults(
     mode,
     rawCompanies: agentCompanies.length,
     uniqueCandidates: candidates.length,
-    excludedTracked: trackedKeys.size,
+    excludedTracked: trackedCompanyNames.length,
+    userExclusions: exclusions.length,
   });
 
   if (candidates.length === 0) return [];

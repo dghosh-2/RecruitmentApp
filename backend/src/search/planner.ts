@@ -66,6 +66,13 @@ const PLANNER_SCHEMA = {
       items: { type: 'string' },
       description: 'Distinct hard/soft constraints extracted from the query (may be empty).',
     },
+    exclusions: {
+      type: 'array',
+      items: { type: 'string' },
+      description:
+        'Specific company names the user explicitly wants to EXCLUDE ' +
+        '(e.g. "excluding Point72, Walleye"). Bare company names only; empty if none.',
+    },
     extra_tasks: {
       type: 'array',
       description:
@@ -87,8 +94,26 @@ const PLANNER_SCHEMA = {
       },
     },
   },
-  required: ['intent_summary', 'constraints', 'extra_tasks'],
+  required: ['intent_summary', 'constraints', 'exclusions', 'extra_tasks'],
 } as const;
+
+/**
+ * Cheap, dependency-free exclusion extractor used as a fallback (fast mode) and
+ * unioned with the LLM's exclusions. Captures the clause after an exclusion cue
+ * ("excluding", "except", "not", "no", "other than", "but not", "avoid") and
+ * splits it into candidate company names on commas / "and" / "or".
+ */
+export function extractExclusionsHeuristic(query: string): string[] {
+  const cue =
+    /(?:excluding|except(?:\s+for)?|other than|but not|not including|avoid|no|not)\s+(.+?)(?:[.!?]|$)/i;
+  const match = query.match(cue);
+  if (!match) return [];
+  return match[1]
+    .replace(/\bcompanies\b|\blike\b|\bsuch as\b|\betc\.?\b/gi, '')
+    .split(/,|;|\/|\band\b|\bor\b/i)
+    .map((s) => s.trim().replace(/^[-•\s]+|[-•\s]+$/g, ''))
+    .filter((s) => s.length > 1 && s.length <= 60);
+}
 
 /**
  * Fast mode: a small fixed fan-out (direct matches + constraint-focused) with NO
@@ -98,8 +123,22 @@ const PLANNER_SCHEMA = {
 function fastPlan(query: string, preference: Preference, searchId: number): SearchPlan {
   const standard = standardTasks(query, preference);
   const tasks = [standard[0], standard[2]]; // direct_match + constraint
-  logger.info('Planner: fast plan ready', { searchId, totalTasks: tasks.length });
-  return { intentSummary: '', constraints: [], tasks };
+  const exclusions = extractExclusionsHeuristic(query);
+  logger.info('Planner: fast plan ready', { searchId, totalTasks: tasks.length, exclusions: exclusions.length });
+  return { intentSummary: '', constraints: [], exclusions, tasks };
+}
+
+/** Case-insensitive union of two name lists, preserving first-seen casing. */
+function unionNames(a: string[], b: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const name of [...a, ...b]) {
+    const key = name.toLowerCase().trim();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(name.trim());
+  }
+  return out;
 }
 
 export async function planResearch(
@@ -115,6 +154,7 @@ export async function planResearch(
 
   let intentSummary = '';
   let constraints: string[] = [];
+  let exclusions: string[] = [];
   let extraTasks: ResearchTask[] = [];
 
   try {
@@ -153,6 +193,7 @@ export async function planResearch(
       if (parsed.success) {
         intentSummary = parsed.data.intent_summary;
         constraints = parsed.data.constraints;
+        exclusions = parsed.data.exclusions;
         extraTasks = parsed.data.extra_tasks.slice(0, maxExtra).map((t) => ({
           ...t,
           angle: 'dynamic' as const,
@@ -172,13 +213,18 @@ export async function planResearch(
     });
   }
 
+  // Union the model's exclusions with a heuristic pass so an obvious
+  // "excluding X, Y" is honored even if the LLM omits it.
+  const allExclusions = unionNames(exclusions, extractExclusionsHeuristic(query));
+
   const tasks = [...standard, ...extraTasks];
   logger.info('Planner: research plan ready', {
     searchId,
     standardTasks: standard.length,
     extraTasks: extraTasks.length,
     totalTasks: tasks.length,
+    exclusions: allExclusions.length,
   });
 
-  return { intentSummary, constraints, tasks };
+  return { intentSummary, constraints, exclusions: allExclusions, tasks };
 }

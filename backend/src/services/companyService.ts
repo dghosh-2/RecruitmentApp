@@ -82,6 +82,13 @@ export function getCompanyRow(companyId: number): CompanyRow {
   return row;
 }
 
+/** Find a user's company by exact name (used to avoid duplicates in auto runs). */
+export function getCompanyByName(userId: number, name: string): CompanyDto | undefined {
+  return db
+    .prepare(`${SELECT_COMPANY} WHERE c.user_id = ? AND c.name = ? LIMIT 1`)
+    .get(userId, name) as CompanyDto | undefined;
+}
+
 export function createCompany(
   userId: number,
   industryId: number,

@@ -61,6 +61,9 @@ function computeEnv() {
     searchAgentConcurrency: int('SEARCH_AGENT_CONCURRENCY', 3),
     searchMaxExtraAgents: int('SEARCH_MAX_EXTRA_AGENTS', 4),
     searchMaxResults: int('SEARCH_MAX_RESULTS', 15),
+    // All-in-one ("Assistant") runs scrape each discovered company. Cap how many
+    // top-ranked companies get auto-scraped, since the AI path is slow/expensive.
+    autoMaxCompanies: int('AUTO_MAX_COMPANIES', 8),
 
     emailProvider: str('EMAIL_PROVIDER', 'console'),
     resendApiKey: process.env.RESEND_API_KEY ?? '',

@@ -174,9 +174,10 @@ recruiterproupdated/
   backend/src/
     config/env.ts       all env access; hot-reloads .env changes; page-cap defaults
     db/                 better-sqlite3 + sequential SQL migrations (auto-applied on boot)
-                        001_init.sql, 002_intern_careers_url.sql
+                        001_init.sql, 002_intern_careers_url.sql, 003_company_searches.sql,
+                        004_auto_search.sql
     middleware/         JWT auth, zod validation, error formatter
-    routes/             auth, industries, companies, listings (thin HTTP layer)
+    routes/             auth, industries, companies, listings, search (thin HTTP layer)
     services/           business logic + SQL (auth, industry, company, listing, scrapeRun)
     scraping/
       types.ts          AtsAdapter interface, RawListing/NormalizedListing
@@ -188,6 +189,13 @@ recruiterproupdated/
       aiExtractor.ts    OpenAI structured-output extraction + pagination loop + truncation flag
       normalize.ts      title cleanup, URL resolution, employment-type classification
       pipeline.ts       orchestrator: scrapeCompany(mode), resolveSource, discoverForCompany, queue
+    search/             NL multi-agent pipeline (planner -> researcher -> aggregator)
+      planner.ts        Orchestrator 1: build research plan; extract constraints + exclusions
+      researcher.ts     research sub-agent (web_search) -> candidate companies
+      aggregator.ts     Orchestrator 2: dedupe, exclude tracked + user exclusions, rank
+      pipeline.ts       discover-only run (Discover page): plan -> research -> aggregate
+      autoPipeline.ts   all-in-one Assistant: discover -> persist -> scrape interns -> aggregate jobs
+      concurrency.ts    runWithConcurrency() bounded fan-out (collects results)
     jobs/queue.ts       in-process bounded-concurrency queue (seam for BullMQ/cron)
     email/index.ts      EmailProvider interface; console provider default (seam for Resend)
     app.ts / server.ts  express wiring; migrations run on boot
@@ -196,9 +204,30 @@ recruiterproupdated/
     api/                fetch client (JWT header), typed endpoint wrappers, shared types
     context/            AuthContext (token in localStorage, /auth/me hydration)
     components/         Layout (topbar + nav badge), CompanyCard, ListingRow, Badge
-    pages/              Login, Register, Dashboard, CompanyDetail, Inbox, Settings
+    pages/              Login, Register, Dashboard, Assistant, Discover, CompanyDetail, Inbox, Settings
     styles/global.css   white/blue theme; Space Grotesk + JetBrains Mono
 ```
+
+## All-in-one Assistant (natural-language end-to-end)
+
+The Assistant (`/assistant`, `backend/src/search/autoPipeline.ts`) turns one prompt
+(e.g. "find me quant internships for 2027, excluding Point72, Walleye") into a full run:
+
+```
+plan + research (reuse discovery agents)  -> ranked companies
+   -> exclude already-tracked + user "excluding ..." names (aggregator)
+   -> persist top env.autoMaxCompanies under the auto-created "AI Finds" industry
+   -> scrapeCompany(id, 'internship') for each (reuses the normal scrape pipeline)
+   -> collect internship listings into a per-company snapshot (jobs_json)
+```
+
+Invariant reuse: it never duplicates pipeline logic — discovery uses the existing search
+agents and scraping goes through `scrapeCompany`. Companies persist (so jobs also appear in the
+normal Inbox), and because they become "tracked", a re-run of the same prompt surfaces NEW
+companies (the "I've exhausted my list" case). Exclusions are parsed by the planner LLM AND a
+heuristic (`extractExclusionsHeuristic`) and applied in `aggregator.ts` by normalized name.
+Runs are `kind='auto'` rows on `company_searches` with a `phase` (planning/researching/scraping/done)
+the UI polls; bounded by `searchConcurrency` (run) and `scrapeConcurrency` (per-company scrape fan-out).
 
 ## Data model (SQLite)
 
@@ -209,6 +238,7 @@ recruiterproupdated/
 | `companies` | `careers_url`, `intern_careers_url` (optional dedicated internships page), `ats_type`/`ats_slug`, `discovery_status` (pending/searching/found/manual_needed), last scrape status/error |
 | `listings` | title/url/location/`employment_type`/team, `fingerprint` (UNIQUE with company), `status` (new/seen/deleted) |
 | `scrape_runs` | per-attempt audit: method (`ats:greenhouse` / `ai`), pages, found/new counts, error |
+| `company_searches` | NL runs: `query`, `mode` (fast/thorough), `kind` (discover/auto), `phase`, `status`, `plan_json`, `results_json` (companies), `jobs_json` (auto run's per-company internships) |
 
 Preference filtering happens at query time (`listingService.listListings`): "internship" shows
 internships + unknowns (so AI-extracted listings without a confident type aren't hidden);
@@ -228,6 +258,8 @@ POST   /api/companies/scrape-all      (body { mode?: 'all'|'internship' }; enque
 GET    /api/listings?companyId=&status=&applyPreference=&employmentType=
 PATCH  /api/listings/:id       (status)   DELETE /api/listings/:id  (soft delete)
 POST   /api/listings/mark-seen
+POST   /api/search             (body { query, mode?: 'fast'|'thorough', kind?: 'discover'|'auto' }; 202, poll get)
+GET    /api/search             (recent runs)        GET /api/search/:id  (status + results + jobs)
 ```
 
 Auth: `Authorization: Bearer <jwt>`. Errors: `{ error: { code, message } }`.

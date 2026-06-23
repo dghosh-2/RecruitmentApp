@@ -80,7 +80,8 @@ export async function runSearch(searchId: number): Promise<void> {
       agentCompanies,
       trackedNames,
       searchId,
-      row.mode
+      row.mode,
+      plan.exclusions
     );
 
     setSearchResults(searchId, results);

@@ -614,3 +614,159 @@ input:focus, select:focus {
   font-size: 12px;
   color: var(--red-600);
 }
+
+/* --- Assistant (all-in-one NL) --- */
+.assistant-recent {
+  margin-top: 28px;
+}
+.assistant-recent h2 {
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 10px;
+  color: var(--ink-600);
+}
+.assistant-recent-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.assistant-recent-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  text-align: left;
+  padding: 11px 14px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+.assistant-recent-item:hover {
+  border-color: var(--blue-400);
+}
+.assistant-recent-q {
+  font-size: 13.5px;
+  color: var(--ink-900);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.assistant-recent-meta {
+  font-size: 12px;
+  color: var(--ink-400);
+  white-space: nowrap;
+}
+
+.assistant-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px;
+}
+.assistant-steps {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.assistant-step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--ink-400);
+}
+.assistant-step.active {
+  color: var(--blue-500);
+  font-weight: 600;
+}
+.assistant-step.done {
+  color: var(--green-600);
+}
+.assistant-step:not(:last-child)::after {
+  content: '→';
+  margin-left: 6px;
+  color: var(--ink-400);
+}
+.assistant-step-dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  font-size: 11px;
+}
+.assistant-step.active .assistant-step-dot {
+  border-color: var(--blue-400);
+}
+
+.assistant-companies {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.assistant-company {
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.assistant-company-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.assistant-company-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ink-900);
+}
+.assistant-company-name:hover {
+  color: var(--blue-500);
+}
+.assistant-count {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--blue-500);
+  background: var(--blue-100);
+  border-radius: 99px;
+  padding: 3px 10px;
+  white-space: nowrap;
+}
+.assistant-jobs {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.assistant-job {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+  font-size: 13.5px;
+}
+.assistant-job a {
+  color: var(--ink-900);
+}
+.assistant-job a:hover {
+  color: var(--blue-500);
+}
+.assistant-job-loc {
+  font-size: 12px;
+  color: var(--ink-400);
+  white-space: nowrap;
+}
+.assistant-empty-note {
+  margin: 0;
+}

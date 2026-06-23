@@ -1,18 +1,29 @@
 import { db } from '../db/index.js';
 import { HttpError } from '../utils/httpError.js';
-import type { SearchMode, SearchPlan, SearchResultCompany } from '../search/types.js';
+import type {
+  AutoCompanyResult,
+  AutoPhase,
+  SearchMode,
+  SearchPlan,
+  SearchResultCompany,
+} from '../search/types.js';
 
 export type SearchStatus = 'pending' | 'running' | 'success' | 'failed';
+/** 'discover' = company suggestions only; 'auto' = the all-in-one Assistant run. */
+export type SearchKind = 'discover' | 'auto';
 
 export interface CompanySearchRow {
   id: number;
   user_id: number;
   query: string;
   mode: SearchMode;
+  kind: SearchKind;
+  phase: AutoPhase | null;
   status: SearchStatus;
   error: string | null;
   plan_json: string | null;
   results_json: string | null;
+  jobs_json: string | null;
   created_at: string;
   finished_at: string | null;
 }
@@ -22,10 +33,13 @@ export interface CompanySearchDto {
   id: number;
   query: string;
   mode: SearchMode;
+  kind: SearchKind;
+  phase: AutoPhase | null;
   status: SearchStatus;
   error: string | null;
   plan: SearchPlan | null;
   results: SearchResultCompany[];
+  jobs: AutoCompanyResult[];
   createdAt: string;
   finishedAt: string | null;
 }
@@ -44,10 +58,13 @@ function toDto(row: CompanySearchRow): CompanySearchDto {
     id: row.id,
     query: row.query,
     mode: row.mode,
+    kind: row.kind,
+    phase: row.phase,
     status: row.status,
     error: row.error,
     plan: safeParse<SearchPlan | null>(row.plan_json, null),
     results: safeParse<SearchResultCompany[]>(row.results_json, []),
+    jobs: safeParse<AutoCompanyResult[]>(row.jobs_json, []),
     createdAt: row.created_at,
     finishedAt: row.finished_at,
   };
@@ -56,11 +73,12 @@ function toDto(row: CompanySearchRow): CompanySearchDto {
 export function createSearch(
   userId: number,
   query: string,
-  mode: SearchMode = 'thorough'
+  mode: SearchMode = 'thorough',
+  kind: SearchKind = 'discover'
 ): CompanySearchDto {
   const info = db
-    .prepare('INSERT INTO company_searches (user_id, query, mode) VALUES (?, ?, ?)')
-    .run(userId, query, mode);
+    .prepare('INSERT INTO company_searches (user_id, query, mode, kind) VALUES (?, ?, ?, ?)')
+    .run(userId, query, mode, kind);
   return getSearch(userId, Number(info.lastInsertRowid));
 }
 
@@ -96,6 +114,19 @@ export function setSearchStatus(searchId: number, status: SearchStatus, error?: 
   );
 }
 
+/** Update the granular phase of an auto run (planning/researching/scraping/done). */
+export function setSearchPhase(searchId: number, phase: AutoPhase): void {
+  db.prepare('UPDATE company_searches SET phase = ? WHERE id = ?').run(phase, searchId);
+}
+
+/** Persist the aggregated per-company job snapshot for an auto run. */
+export function setSearchJobs(searchId: number, jobs: AutoCompanyResult[]): void {
+  db.prepare('UPDATE company_searches SET jobs_json = ? WHERE id = ?').run(
+    JSON.stringify(jobs),
+    searchId
+  );
+}
+
 export function setSearchPlan(searchId: number, plan: SearchPlan): void {
   db.prepare('UPDATE company_searches SET plan_json = ? WHERE id = ?').run(
     JSON.stringify(plan),
@@ -110,6 +141,23 @@ export function setSearchResults(searchId: number, results: SearchResultCompany[
      SET results_json = ?, status = 'success', error = NULL, finished_at = datetime('now')
      WHERE id = ?`
   ).run(JSON.stringify(results), searchId);
+}
+
+/** Store the discovered companies without settling the row (auto runs continue to scraping). */
+export function setSearchCompanies(searchId: number, results: SearchResultCompany[]): void {
+  db.prepare('UPDATE company_searches SET results_json = ? WHERE id = ?').run(
+    JSON.stringify(results),
+    searchId
+  );
+}
+
+/** Settle an in-progress (auto) run as success after all phases complete. */
+export function settleSearchSuccess(searchId: number): void {
+  db.prepare(
+    `UPDATE company_searches
+     SET status = 'success', error = NULL, finished_at = datetime('now')
+     WHERE id = ?`
+  ).run(searchId);
 }
 
 export function failSearch(searchId: number, error: string): void {
